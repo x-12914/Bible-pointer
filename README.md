@@ -64,25 +64,43 @@ reverse proxy. Example with **Caddy** (auto HTTPS) + **systemd**:
 
 ```bash
 # On the server (Debian/Ubuntu):
-sudo apt install -y python3-pip
-sudo mkdir -p /opt/bible-pointer && sudo chown $USER /opt/bible-pointer
-# copy the project files into /opt/bible-pointer, then:
-cd /opt/bible-pointer
-pip install -r requirements.txt
-python3 get-model.py
+sudo apt update && sudo apt install -y python3 python3-venv python3-pip git
+sudo mkdir -p /opt/bible-pointer && sudo chown $USER:$USER /opt/bible-pointer
 
-# Run as a service (listens on localhost:8080):
+# Get the code (clone your repo, or scp the folder here):
+git clone YOUR_REPO_URL /opt/bible-pointer
+cd /opt/bible-pointer
+
+# Python deps in a virtualenv (avoids PEP 668 "externally-managed" errors):
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
+./venv/bin/python get-model.py            # downloads the Vosk model
+
+# Run as a service (listens on 127.0.0.1:8080):
 sudo cp deploy/bible-pointer.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now bible-pointer
-
-# Terminate HTTPS + proxy /asr WebSocket (edit the domain in deploy/Caddyfile first):
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-sudo systemctl restart caddy
+systemctl status bible-pointer            # should be "active (running)"
 ```
 
-Then browse to `https://your-domain.com`. Caddy obtains a free certificate and
-upgrades the WebSocket automatically. Point your domain's DNS at the VPS first, and
-open ports 80/443 in the firewall.
+Then put it behind HTTPS with **either** nginx **or** Caddy:
+
+```bash
+# Option A — nginx + Let's Encrypt (edit the domain in deploy/nginx.conf first):
+sudo apt install -y nginx certbot python3-certbot-nginx
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/bible-pointer
+sudo ln -s /etc/nginx/sites-available/bible-pointer /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d your-domain.com   # fetches cert, adds HTTPS + redirect, auto-renews
+
+# Option B — Caddy (auto HTTPS; edit the domain in deploy/Caddyfile first):
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl restart caddy
+```
+
+Then browse to `https://your-domain.com`. Point your domain's DNS at the VPS first,
+and open ports 80/443 (e.g. `sudo ufw allow 'Nginx Full'`). The reverse proxy must
+forward the `/asr` WebSocket upgrade headers — both `deploy/nginx.conf` and
+`deploy/Caddyfile` already do.
 
 ## Updating the Bible data
 

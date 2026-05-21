@@ -16,7 +16,9 @@ WorkingDirectory=/opt/bible-pointer
 Environment=PORT=8080
 Environment=VOSK_MODEL=/opt/bible-pointer/model
 Environment=STATIC_DIR=/opt/bible-pointer
-ExecStart=/usr/bin/python3 /opt/bible-pointer/server.py
+# Uses a virtualenv at /opt/bible-pointer/venv (see README). If you installed deps
+# system-wide instead, change this to: /usr/bin/python3 /opt/bible-pointer/server.py
+ExecStart=/opt/bible-pointer/venv/bin/python /opt/bible-pointer/server.py
 Restart=on-failure
 RestartSec=3
 
