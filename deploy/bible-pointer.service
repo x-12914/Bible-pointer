@@ -1,0 +1,24 @@
+# systemd unit for the Bible Pointer voice backend.
+# Install:
+#   sudo cp deploy/bible-pointer.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now bible-pointer
+# Logs:    journalctl -u bible-pointer -f
+
+[Unit]
+Description=Bible Pointer voice backend (aiohttp + Vosk)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/bible-pointer
+Environment=PORT=8080
+Environment=VOSK_MODEL=/opt/bible-pointer/model
+Environment=STATIC_DIR=/opt/bible-pointer
+ExecStart=/usr/bin/python3 /opt/bible-pointer/server.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

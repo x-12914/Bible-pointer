@@ -1,0 +1,18 @@
+# Dependencies / caches
+node_modules/
+__pycache__/
+*.pyc
+
+# Vosk model — large + regenerable via get-model.py (run on each machine/server)
+model/
+model.zip
+
+# Local data + secrets (used once payments are added)
+data.db
+*.sqlite
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db

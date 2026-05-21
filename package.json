@@ -1,0 +1,21 @@
+{
+  "name": "bible-pointer",
+  "version": "1.0.0",
+  "description": "An offline-first, voice-assisted Bible reference search web dashboard with a live presentation display and a self-hosted Vosk speech backend.",
+  "private": true,
+  "scripts": {
+    "start": "python server.py",
+    "static": "npx serve .",
+    "fetch-data": "node download.js"
+  },
+  "keywords": [
+    "bible",
+    "kjv",
+    "voice-search",
+    "vosk",
+    "speech-to-text",
+    "dashboard",
+    "presentation"
+  ],
+  "license": "MIT"
+}

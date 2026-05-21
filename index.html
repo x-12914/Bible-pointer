@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bible Pointer - Voice Offline Bible Search</title>
+  
+  <!-- Preload fonts for high-end styling (will degrade gracefully to system serif/sans-serif if offline) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- App Wrapper -->
+  <div class="app-container">
+    
+    <!-- Left Navigation / Sidebar Panel (Desktop: Sidebar, Mobile: Top/Accordion) -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo-ring">
+          <span class="logo-cross">†</span>
+        </div>
+        <div>
+          <h1 class="brand-title">Bible Pointer</h1>
+          <p class="brand-subtitle">100% Offline Search</p>
+        </div>
+      </div>
+
+      <!-- Quick Browse Console -->
+      <section class="sidebar-section">
+        <h3 class="section-title">Quick Browse</h3>
+        <div class="browse-selectors">
+          <div class="select-group">
+            <label for="book-select">Book</label>
+            <select id="book-select" class="custom-select">
+              <!-- Populated dynamically by app.js -->
+            </select>
+          </div>
+          <div class="select-row">
+            <div class="select-group">
+              <label for="chapter-select">Chapter</label>
+              <select id="chapter-select" class="custom-select">
+                <!-- Populated dynamically by app.js -->
+              </select>
+            </div>
+            <div class="select-group">
+              <label for="verse-select">Verse</label>
+              <select id="verse-select" class="custom-select">
+                <!-- Populated dynamically by app.js -->
+              </select>
+            </div>
+          </div>
+          <button id="browse-btn" class="primary-btn">Browse Offline</button>
+        </div>
+      </section>
+
+      <!-- Presentation Settings Section -->
+      <section class="sidebar-section">
+        <h3 class="section-title">Presentation Settings</h3>
+        <div class="browse-selectors">
+          <div class="select-group">
+            <label for="display-title-input">Default Title</label>
+            <input type="text" id="display-title-input" class="custom-select" style="cursor: text;" placeholder="e.g., Welcome to Worship" value="Welcome to Bible Pointer">
+          </div>
+        </div>
+      </section>
+
+      <!-- History Section -->
+      <section class="sidebar-section">
+        <div class="section-header">
+          <h3 class="section-title">Recent Searches</h3>
+          <button id="clear-history" class="text-btn">Clear</button>
+        </div>
+        <ul id="history-list" class="sidebar-list">
+          <li class="empty-list-msg">No recent searches</li>
+        </ul>
+      </section>
+
+      <!-- Bookmarks Section -->
+      <section class="sidebar-section">
+        <h3 class="section-title">Saved Verses</h3>
+        <ul id="bookmarks-list" class="sidebar-list">
+          <li class="empty-list-msg">No saved verses yet</li>
+        </ul>
+      </section>
+    </aside>
+
+    <!-- Main Content Canvas -->
+    <main class="main-canvas">
+      
+      <!-- Interactive Search Banner -->
+      <header class="search-banner">
+        
+        <!-- Voice Search Center -->
+        <div class="voice-center">
+          <div class="mic-outer-ring" id="mic-btn" title="Click to Speak Bible Reference">
+            <div class="mic-wave-pulse pulse-1"></div>
+            <div class="mic-wave-pulse pulse-2"></div>
+            <div class="mic-wave-pulse pulse-3"></div>
+            <div class="mic-inner-circle">
+              <svg class="mic-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 1a4 4 0 0 0-4 4v7a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4z" fill="currentColor"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+          </div>
+          
+          <div class="status-container">
+            <p id="speech-status" class="listening-status-text">Click the microphone to speak a reference...</p>
+            <div class="voice-bars-visualizer" id="voice-visualizer">
+              <span class="voice-bar bar-1"></span>
+              <span class="voice-bar bar-2"></span>
+              <span class="voice-bar bar-3"></span>
+              <span class="voice-bar bar-4"></span>
+              <span class="voice-bar bar-5"></span>
+            </div>
+            <p class="sample-prompt">Try saying: <span class="prompt-hint">"Matthew 12 verse 2"</span> or <span class="prompt-hint">"John 3:16"</span></p>
+            <p class="voice-requirement-note" style="font-size: 0.72rem; color: var(--color-text-secondary); opacity: 0.75; margin-top: 0.35rem; max-width: 380px;">Voice uses your browser's speech engine (Chrome or Edge), needs internet, and listens to your computer's <strong>default microphone</strong> &mdash; set that in your OS sound settings. Browsing and typed search work fully offline.</p>
+            <div class="mic-controls-row" style="display: flex; flex-direction: column; align-items: center; gap: 0.6rem; margin-top: 0.8rem;">
+              <div class="mic-selector-container" id="mic-selector-wrapper" style="display: none; align-items: center; justify-content: center; gap: 0.5rem;">
+                <label for="mic-select" class="mic-select-label" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--color-text-secondary);">Microphone:</label>
+                <select id="mic-select" class="custom-select mic-dropdown" style="max-width: 250px; padding: 0.4rem 0.6rem; font-size: 0.8rem; border-radius: 6px; background-color: var(--bg-sidebar); border: 1px solid var(--border-color); color: var(--color-text-primary); outline: none;">
+                  <option value="default">Default System Mic</option>
+                </select>
+              </div>
+              <div class="continuous-toggle-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="continuous-listening-checkbox" style="width: 16px; height: 16px; accent-color: var(--gold-primary); cursor: pointer;">
+                <label for="continuous-listening-checkbox" style="font-size: 0.8rem; color: var(--color-text-secondary); cursor: pointer; letter-spacing: 0.5px;">Constantly Listen (Wake Word / Live Search)</label>
+              </div>
+              <button type="button" id="open-display-btn" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--bg-sidebar); color: var(--gold-primary); cursor: pointer; outline: none; transition: all 0.3s; margin-top: 0.2rem;">
+                Open Presentation Tab
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search Mode Toggle -->
+        <div class="search-mode-container">
+          <div class="search-mode-toggle" id="search-mode-toggle">
+            <button class="mode-toggle-btn active" id="mode-ref-btn">Reference Search</button>
+            <button class="mode-toggle-btn" id="mode-reverse-btn">Reverse Search (Keywords)</button>
+          </div>
+        </div>
+
+        <!-- Text Search / Manual Input -->
+        <div class="search-form">
+          <div class="search-input-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="search-input" placeholder="Type reference... (e.g. Gen 1:1, Matt 12:2-5, Psalms 23)" autocomplete="off">
+            <button id="search-clear-btn" class="clear-input-btn">&times;</button>
+          </div>
+          <button id="search-btn" class="accent-btn">Search</button>
+        </div>
+
+      </header>
+
+      <!-- Scripture Viewer Panel -->
+      <section class="viewer-section">
+        <div class="scripture-card" id="scripture-card">
+          
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="scripture-title" class="scripture-heading">Welcome to Bible Pointer</h2>
+              <span id="scripture-meta" class="scripture-translation-badge">King James Version</span>
+            </div>
+            
+            <div class="card-actions">
+              <!-- Voice Selector Dropdown -->
+              <div class="voice-selector-container">
+                <select id="voice-select" class="custom-select voice-dropdown" title="Select Voice Engine">
+                  <option value="">Default System Voice</option>
+                </select>
+              </div>
+
+              <!-- Read Aloud / TTS Control -->
+              <button id="tts-btn" class="icon-action-btn" title="Read Aloud" disabled>
+                <svg viewBox="0 0 24 24" fill="currentColor" class="action-icon">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+                <span class="action-btn-text">Read Aloud</span>
+              </button>
+              
+              <!-- Bookmark Toggle -->
+              <button id="bookmark-btn" class="icon-action-btn" title="Save Verse" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="action-icon bookmark-svg">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span class="action-btn-text">Save</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Scripture Text Frame -->
+          <div class="scripture-content">
+            <div id="scripture-body" class="scripture-text-body">
+              <p class="intro-p">To get started, click the gold microphone button above and say a Bible reference clearly. For example, say: <strong class="glow-txt">"Matthew 12 verse 2"</strong>.</p>
+              <p class="intro-p">Alternatively, use the text search bar above or browser dropdown selectors in the left panel to browse all scriptures 100% offline.</p>
+              
+              <div class="guide-box">
+                <h4>Voice Commands Cheat Sheet</h4>
+                <ul>
+                  <li><strong>Standard Verse:</strong> "John three sixteen" or "John 3:16"</li>
+                  <li><strong>Single Chapter:</strong> "Psalm twenty-three" or "Psalm 23"</li>
+                  <li><strong>Verse Ranges:</strong> "Genesis one verses one to five" or "Romans 8:28-30"</li>
+                  <li><strong>Multi-word Books:</strong> "First Corinthians fifteen fifty-five" or "1 John 1:9"</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Pager (Next/Prev buttons) -->
+          <div class="card-footer" id="card-footer" style="display: none;">
+            <button id="prev-chapter-btn" class="footer-nav-btn">
+              <span>&larr; Previous</span>
+            </button>
+            <button id="next-chapter-btn" class="footer-nav-btn">
+              <span>Next &rarr;</span>
+            </button>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- Load Offline KJV Bible Data (BIBLE_DATA) -->
+  <script src="bible-data.js"></script>
+  <!-- Load Main Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

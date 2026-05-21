@@ -1,0 +1,11 @@
+# Caddy reverse proxy for Bible Pointer.
+# Caddy automatically obtains + renews a free HTTPS certificate (Let's Encrypt)
+# and transparently upgrades the /asr WebSocket. Replace the domain below.
+#
+# Install Caddy:  https://caddyserver.com/docs/install
+# Run:            sudo caddy run --config /etc/caddy/Caddyfile
+#   (or with the systemd service that ships with the Caddy package)
+
+your-domain.com {
+    reverse_proxy localhost:8080
+}

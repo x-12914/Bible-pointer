@@ -1,0 +1,110 @@
+# Bible Pointer
+
+A web dashboard for finding and presenting Bible passages (KJV), with **gapless,
+self-hosted offline voice search** powered by Vosk.
+
+## Features
+
+- **Voice search** — speak a reference like *"Matthew twelve verse two"* or
+  *"John three sixteen"*. Two engines (see [Voice](#how-voice-works)).
+- **Reference search** — type `Gen 1:1`, `Matt 12:2-5`, `Psalms 23`, etc.
+- **Reverse (keyword) search** — find verses by words or phrases.
+- **Quick Browse** — Book / Chapter / Verse dropdowns.
+- **Presentation tab** — a clean full-screen display (`display.html`) that updates
+  live via `BroadcastChannel` for projecting verses.
+- **History & saved verses**, plus **Read Aloud** (text-to-speech).
+
+## How voice works
+
+Voice has two engines; the app picks the best one automatically:
+
+1. **Vosk (preferred)** — when the Python backend (`server.py`) is running, the
+   browser streams microphone audio over a `/asr` WebSocket to a local Vosk
+   recognizer. This is **gapless** (one continuous stream, no restarts),
+   **fully offline** (no cloud, no per-use cost), and works in **every browser**
+   (including Firefox/Safari/mobile). Recognition is grammar-constrained to Bible
+   vocabulary, so number homophones ("two" vs "to") resolve correctly.
+2. **Web Speech API (fallback)** — if no Vosk backend is reachable (e.g. you opened
+   the plain static files), it falls back to the browser's built-in engine
+   (Chrome/Edge only, needs internet, brief restart gaps).
+
+Browsing and typed search are always 100% offline regardless of engine.
+
+## Run it locally (with offline voice)
+
+Requires **Python 3.9+**.
+
+```bash
+pip install -r requirements.txt
+python get-model.py          # one-time: downloads the ~40 MB Vosk model into ./model
+python server.py             # serves the app + voice backend on http://localhost:8080
+```
+
+Open **http://localhost:8080**, click the mic, allow it, and say a reference.
+
+> The bundled `model/` folder already contains the model, so you can usually skip
+> `get-model.py`. Run it only on a fresh machine that has no `model/`.
+
+### Static-only (no offline voice)
+
+```bash
+npm run static     # npx serve .  -> http://localhost:3000
+```
+
+This serves only the static files, so voice uses the Web Speech fallback
+(Chrome/Edge + internet). Good for a quick UI preview.
+
+> Note: the microphone only works over **https://** or **http://localhost** — never
+> from a `file://` page.
+
+## Deploy to a VPS (public, with HTTPS)
+
+The microphone requires HTTPS on a public domain, so put the app behind a TLS
+reverse proxy. Example with **Caddy** (auto HTTPS) + **systemd**:
+
+```bash
+# On the server (Debian/Ubuntu):
+sudo apt install -y python3-pip
+sudo mkdir -p /opt/bible-pointer && sudo chown $USER /opt/bible-pointer
+# copy the project files into /opt/bible-pointer, then:
+cd /opt/bible-pointer
+pip install -r requirements.txt
+python3 get-model.py
+
+# Run as a service (listens on localhost:8080):
+sudo cp deploy/bible-pointer.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now bible-pointer
+
+# Terminate HTTPS + proxy /asr WebSocket (edit the domain in deploy/Caddyfile first):
+sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl restart caddy
+```
+
+Then browse to `https://your-domain.com`. Caddy obtains a free certificate and
+upgrades the WebSocket automatically. Point your domain's DNS at the VPS first, and
+open ports 80/443 in the firewall.
+
+## Updating the Bible data
+
+`bible-data.js` (loaded by the page) is generated from a public KJV source:
+
+```bash
+npm run fetch-data   # node download.js -> regenerates bible-data.js
+```
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `index.html` | Main dashboard UI |
+| `app.js` | App logic: dual-engine voice, parsing, search, TTS, history, bookmarks |
+| `styles.css` | Styling |
+| `bible-data.js` | Offline KJV scripture data (`BIBLE_DATA`) |
+| `display.html` | Standalone presentation/projection screen |
+| `server.py` | Python backend: serves the app + `/asr` Vosk WebSocket |
+| `get-model.py` | Downloads the Vosk model into `./model` |
+| `requirements.txt` | Python deps (`vosk`, `aiohttp`) |
+| `model/` | Vosk speech model (gitignored; fetched by `get-model.py`) |
+| `deploy/Caddyfile` | Example HTTPS reverse-proxy config |
+| `deploy/bible-pointer.service` | Example systemd unit |
+| `download.js` | Dev utility to regenerate the Bible data |
