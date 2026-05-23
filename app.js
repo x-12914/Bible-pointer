@@ -934,6 +934,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Vosk streaming state
   let voskWS = null, voskCtx = null, voskSource = null, voskProcessor = null, voskStream = null;
+  let voskAnalyser = null, voskMeterRAF = null, voskLevelSeen = false, voskSilenceTimer = null;
 
   const continuousCheckbox = document.getElementById('continuous-listening-checkbox');
 
@@ -953,9 +954,86 @@ document.addEventListener('DOMContentLoaded', () => {
   const openDisplayBtn = document.getElementById('open-display-btn');
   if (openDisplayBtn) openDisplayBtn.addEventListener('click', openPresentationTab);
 
-  // The in-app mic picker can't steer either engine reliably, so keep it hidden.
+  // Microphone picker. This DOES work for the Vosk path, because we call
+  // getUserMedia ourselves and can request an exact deviceId. (It can't steer the
+  // Web Speech fallback, which always uses the OS default — a browser limitation.)
+  const micSelect = document.getElementById('mic-select');
   const micSelectorWrapper = document.getElementById('mic-selector-wrapper');
-  if (micSelectorWrapper) micSelectorWrapper.style.display = 'none';
+
+  function selectedMicId() {
+    const v = micSelect ? micSelect.value : '';
+    return (v && v !== 'default') ? v : null;
+  }
+  function refreshMicList() {
+    if (!micSelect || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    navigator.mediaDevices.enumerateDevices().then(devs => {
+      const mics = devs.filter(d => d.kind === 'audioinput');
+      if (!mics.length) return;
+      const saved = localStorage.getItem('selectedMicId') || 'default';
+      micSelect.innerHTML = '';
+      // Always offer the system default first — that's what we use unless the user
+      // explicitly picks a device. (Auto-picking the first enumerated device can
+      // grab the wrong mic — exactly the bug we're fixing.)
+      const def = document.createElement('option');
+      def.value = 'default';
+      def.textContent = 'Default microphone';
+      micSelect.appendChild(def);
+      mics.forEach((d, i) => {
+        const o = document.createElement('option');
+        o.value = d.deviceId;
+        o.textContent = d.label || ('Microphone ' + (i + 1));
+        micSelect.appendChild(o);
+      });
+      micSelect.value = (saved === 'default' || mics.some(m => m.deviceId === saved)) ? saved : 'default';
+      if (micSelectorWrapper) micSelectorWrapper.style.display = 'flex'; // show once we have labels
+    }).catch(() => {});
+  }
+  if (micSelect) {
+    micSelect.addEventListener('change', () => {
+      localStorage.setItem('selectedMicId', micSelect.value);
+      if (isListening) { stopVoice(); setTimeout(startVoice, 400); } // re-open on the new device
+    });
+  }
+  refreshMicList(); // device labels appear after the first mic-permission grant
+
+  function micError(e) {
+    console.warn("[voice] mic denied/unavailable:", e && e.name);
+    isListening = false; resetMicUI();
+    if (e && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError')) {
+      setStatus("Microphone blocked. Tap the lock/ⓘ icon by the address bar, Allow the mic, then reload.", true);
+      showToast("Microphone permission denied.");
+    } else if (e && (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError')) {
+      setStatus("No microphone found. Connect/enable a mic and try again.", true);
+    } else {
+      setStatus("Microphone error (" + (e && e.name) + "). Check your system mic settings.", true);
+    }
+    return 'micdenied';
+  }
+
+  // Lightweight input-level watch: if the chosen mic produces no sound for a few
+  // seconds, the wrong device is selected — nudge the user to the picker.
+  function startLevelWatch(ctx, source) {
+    try {
+      voskAnalyser = ctx.createAnalyser();
+      voskAnalyser.fftSize = 256;
+      source.connect(voskAnalyser);
+      const data = new Uint8Array(voskAnalyser.fftSize);
+      voskLevelSeen = false;
+      const tick = () => {
+        if (!isListening || activeEngine !== 'vosk') return;
+        voskMeterRAF = requestAnimationFrame(tick);
+        voskAnalyser.getByteTimeDomainData(data);
+        let peak = 0;
+        for (let i = 0; i < data.length; i++) { const v = Math.abs(data[i] - 128); if (v > peak) peak = v; }
+        if (peak / 128 > 0.03) voskLevelSeen = true;
+      };
+      tick();
+    } catch (e) { /* analyser optional */ }
+  }
+  function stopLevelWatch() {
+    if (voskMeterRAF) { cancelAnimationFrame(voskMeterRAF); voskMeterRAF = null; }
+    voskAnalyser = null;
+  }
 
   // ---- Small UI helpers --------------------------------------------------
   function setStatus(text, isError) {
@@ -978,6 +1056,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function clearVoiceTimers() {
     if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
     if (oneShotTimer) { clearTimeout(oneShotTimer); oneShotTimer = null; }
+    if (voskSilenceTimer) { clearTimeout(voskSilenceTimer); voskSilenceTimer = null; }
   }
 
   // ---- Shared: turn a transcript into a search ---------------------------
@@ -1037,22 +1116,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let stream;
+    const micId = selectedMicId();
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: micId ? { deviceId: { exact: micId } } : true });
     } catch (e) {
-      console.warn("[voice] mic denied/unavailable:", e && e.name);
-      isListening = false;
-      resetMicUI();
-      if (e && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError')) {
-        setStatus("Microphone blocked. Click the lock icon in the address bar and Allow the mic.", true);
-        showToast("Microphone permission denied.");
-      } else if (e && (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError')) {
-        setStatus("No microphone found. Connect a mic and try again.", true);
+      // Chosen device unavailable → retry with the system default before giving up.
+      if (micId && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError' || e.name === 'NotReadableError')) {
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e2) { return micError(e2); }
       } else {
-        setStatus("Microphone error. Check your system mic settings.", true);
+        return micError(e);
       }
-      return 'micdenied';
     }
+    refreshMicList(); // labels are available now that permission was granted
 
     let ws;
     try { ws = new WebSocket(VOSK_WS_URL); } catch (e) {
@@ -1079,6 +1155,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.text) { voskLevelSeen = true; if (voskSilenceTimer) { clearTimeout(voskSilenceTimer); voskSilenceTimer = null; } }
       if (m.type === 'partial') {
         if (m.text) handleVoiceText(m.text, false);
       } else if (m.type === 'final') {
@@ -1098,6 +1175,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       voskCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (voskCtx.state === 'suspended') { try { voskCtx.resume(); } catch (e) {} }
       voskSource = voskCtx.createMediaStreamSource(stream);
       voskProcessor = voskCtx.createScriptProcessor(4096, 1, 1);
       voskProcessor.onaudioprocess = (e) => {
@@ -1108,6 +1186,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       voskSource.connect(voskProcessor);
       voskProcessor.connect(voskCtx.destination); // outputs silence; needed to fire callback
+      startLevelWatch(voskCtx, voskSource);
     } catch (e) {
       console.warn("[voice] audio graph failed, falling back:", e && e.message);
       voskStop();
@@ -1122,6 +1201,16 @@ document.addEventListener('DOMContentLoaded', () => {
       : "Listening — say a reference clearly…", false);
     showToast("Microphone active (offline voice).");
 
+    // If no sound comes from the chosen mic within ~5s, it's the wrong device.
+    if (voskSilenceTimer) clearTimeout(voskSilenceTimer);
+    voskSilenceTimer = setTimeout(() => {
+      if (isListening && activeEngine === 'vosk' && !voskLevelSeen) {
+        setStatus("No sound from this microphone. Pick a different mic in the dropdown above, or check it isn't muted in your system settings.", true);
+        showToast("No audio from the selected mic.");
+        refreshMicList();
+      }
+    }, 5000);
+
     if (!isContinuousListening) {
       clearTimeout(oneShotTimer);
       oneShotTimer = setTimeout(() => { if (isListening) stopVoice(); }, 12000);
@@ -1130,6 +1219,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function voskStop() {
+    stopLevelWatch();
+    if (voskSilenceTimer) { clearTimeout(voskSilenceTimer); voskSilenceTimer = null; }
     try { if (voskWS && voskWS.readyState === 1) voskWS.send(JSON.stringify({ eof: 1 })); } catch (e) {}
     try { if (voskProcessor) voskProcessor.disconnect(); } catch (e) {}
     try { if (voskSource) voskSource.disconnect(); } catch (e) {}
