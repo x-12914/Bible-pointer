@@ -30,13 +30,29 @@ Voice has two engines; the app picks the best one automatically:
 
 Browsing and typed search are always 100% offline regardless of engine.
 
+### Speech model (and accents)
+
+`get-model.py` defaults to **`en-us-0.22-lgraph`** (~128 MB) — a larger acoustic
+model that handles non-US/African accents noticeably better than the tiny model,
+while still supporting the Bible grammar + gapless streaming. To switch:
+
+```bash
+rm -rf model
+python get-model.py small     # lightest (~40 MB), lower accuracy
+python get-model.py lgraph    # default (~128 MB), better with accents
+python get-model.py indian    # Indian English (~36 MB)
+```
+
+The model path is also configurable via the `VOSK_MODEL` env var, so you can keep
+several models on disk and A/B test which transcribes your users best.
+
 ## Run it locally (with offline voice)
 
 Requires **Python 3.9+**.
 
 ```bash
 pip install -r requirements.txt
-python get-model.py          # one-time: downloads the ~40 MB Vosk model into ./model
+python get-model.py          # one-time: downloads the Vosk model into ./model
 python server.py             # serves the app + voice backend on http://localhost:8080
 ```
 
